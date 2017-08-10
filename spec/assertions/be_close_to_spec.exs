@@ -17,6 +17,21 @@ defmodule ESpec.Assertions.BeCloseToSpec do
       it do: expect(5.5).to be_close_to(5.3, 0.21)
     end
 
+    context "Success with Date" do
+      it "checks success with `to`" do
+        message = expect(~D[2017-08-07]).to be_close_to(~D[2017-08-06], 1)
+        expect(message) |> to(eq "`~D[2017-08-07]` is close to `~D[2017-08-06]` with delta `{:day, 1}`.")
+      end
+
+#      it "checks success with `not_to`" do
+#        message = expect(2).to_not be_close_to(5, 1)
+#        expect(message) |> to(eq "`2` is not close to `5` with delta `1`.")
+#      end
+#
+#      it do: expect(5).to be_close_to(6, 1)
+#      it do: expect(5.5).to be_close_to(5.3, 0.21)
+    end
+
     context "Errors" do
       context "with `to`" do
         before do

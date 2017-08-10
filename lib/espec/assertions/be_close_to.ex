@@ -8,7 +8,7 @@ defmodule ESpec.Assertions.BeCloseTo do
 
   defp match(subject, data) do
     [value, delta] = data
-    result = abs(subject - value) <= delta
+    result = abs(value_comparison(subject, value)) <= delta
     {result, result}
   end
 
@@ -22,5 +22,7 @@ defmodule ESpec.Assertions.BeCloseTo do
     but = if result, do: "it is", else: "it isn't"
     "Expected `#{inspect subject}` #{to} be close to `#{inspect value}` with delta `#{inspect delta}`, but #{but}."
   end
- 
+
+  defp value_comparison(subject = %Date{}, value = %Date{}), do: :calendar.date_to_gregorian_days({subject.year, subject.month, subject.day}) - :calendar.date_to_gregorian_days({value.year, value.month, value.day})
+  defp value_comparison(subject, value), do: subject - value
 end
