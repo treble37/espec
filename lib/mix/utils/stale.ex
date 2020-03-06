@@ -63,32 +63,6 @@ defmodule Mix.Utils.Stale do
     end
   end
 
-  ## Parallel Require Callback dependent on Elixir version
-
-  #  defp parallel_require_callbacks(%Version{major: 1, minor: minor} = version, pid, cwd)
-  #       when minor >= 9,
-  #       do: [
-  #         each_module: &each_module(version, pid, cwd, &1, &2, &3),
-  #         each_file: &each_file(pid, &1, &2)
-  #       ]
-  #
-  #  defp parallel_require_callbacks(%Version{major: 1, minor: minor} = version, pid, cwd)
-  #       when minor >= 6 and minor < 9 do
-  #    [each_module: &each_module(version, pid, cwd, &1, &2, &3)]
-  #  end
-  #
-  #  defp parallel_require_callbacks(_, _, _),
-  #    do: {:error, "Your version of Elixir #{System.version()} cannot support the stale feature"}
-  #
-  #  defp parse_version do
-  #    System.version()
-  #    |> Version.parse()
-  #    |> case do
-  #      {:ok, version} -> version
-  #      :error -> :error
-  #    end
-  #  end
-
   ## Manifest
 
   def write_manifest([]) do
@@ -177,38 +151,6 @@ defmodule Mix.Utils.Stale do
     end
   end
 
-  #  defp tests_with_changed_references(test_sources) do
-  #    test_manifest = manifest()
-  #    [elixir_manifest] = Mix.Tasks.Compile.Elixir.manifests()
-  #
-  #    if Mix.Utils.stale?([elixir_manifest], [test_manifest]) do
-  #      elixir_manifest_entries =
-  #        CE.read_manifest(elixir_manifest, Mix.Project.compile_path())
-  #        |> Enum.group_by(&elem(&1, 0))
-  #
-  #      stale_modules =
-  #        for CE.module(module: module, beam: beam) <- elixir_manifest_entries.module,
-  #            Mix.Utils.stale?([beam], [test_manifest]),
-  #            do: module,
-  #            into: MapSet.new()
-  #
-  #      stale_modules =
-  #        find_all_dependent_on(
-  #          stale_modules,
-  #          elixir_manifest_entries.source,
-  #          elixir_manifest_entries.module
-  #        )
-  #
-  #      for module <- stale_modules,
-  #          source(source: source, runtime_references: r, compile_references: c) <- test_sources,
-  #          module in r or module in c,
-  #          do: source,
-  #          into: MapSet.new()
-  #    else
-  #      MapSet.new()
-  #    end
-  #  end
-
   defp find_all_dependent_on(modules, sources, all_modules, resolved \\ MapSet.new()) do
     new_modules =
       for module <- modules,
@@ -231,78 +173,4 @@ defmodule Mix.Utils.Stale do
         source in sources,
         do: dependent_module
   end
-
-  ## ParallelRequire callback: Handled differently depending on Elixir version
-
-  #  defp each_module(%Version{major: 1, minor: minor}, pid, cwd, file, module, _binary)
-  #       when minor >= 9 do
-  #    external = get_external_resources(module, cwd)
-  #
-  #    if external != [] do
-  #      Agent.update(pid, fn sources ->
-  #        file = Path.relative_to(file, cwd)
-  #        {source, sources} = List.keytake(sources, file, source(:source))
-  #        [source(source, external: external ++ source(source, :external)) | sources]
-  #      end)
-  #    end
-  #
-  #    :ok
-  #  end
-  #
-  #  defp each_module(%Version{major: 1, minor: minor}, pid, cwd, source, module, _binary)
-  #       when minor >= 6 and minor < 9 do
-  #    quote do
-  #      {compile_references, struct_references, runtime_references} =
-  #        Kernel.LexicalTracker.remote_references(module)
-  #
-  #      external = get_external_resources(module, cwd)
-  #      source = Path.relative_to(source, cwd)
-  #
-  #      Agent.cast(pid, fn sources ->
-  #        external =
-  #          case List.keyfind(sources, source, source(:source)) do
-  #            source(external: old_external) -> external ++ old_external
-  #            nil -> external
-  #          end
-  #
-  #        new_source =
-  #          source(
-  #            source: source,
-  #            compile_references: compile_references ++ struct_references,
-  #            runtime_references: runtime_references,
-  #            external: external
-  #          )
-  #
-  #        List.keystore(sources, source, source(:source), new_source)
-  #      end)
-  #    end
-  #  end
-
-  #  defp each_file(pid, file, lexical) do
-  #    quote do
-  #      Agent.update(pid, fn sources ->
-  #        case List.keytake(sources, file, source(:source)) do
-  #          {source, sources} ->
-  #            {compile_references, struct_references, runtime_references} =
-  #              Kernel.LexicalTracker.remote_references(lexical)
-  #
-  #            source =
-  #              source(
-  #                source,
-  #                compile_references: compile_references ++ struct_references,
-  #                runtime_references: runtime_references
-  #              )
-  #
-  #            [source | sources]
-  #
-  #          nil ->
-  #            sources
-  #        end
-  #      end)
-  #    end
-  #  end
-  #
-  #  defp get_external_resources(module, cwd) do
-  #    for file <- Module.get_attribute(module, :external_resource), do: Path.relative_to(file, cwd)
-  #  end
 end
