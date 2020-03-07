@@ -1,7 +1,6 @@
 defmodule Mix.Utils.Stale do
   import Record
 
-  require Mix.Compilers.Elixir, as: CE
   use Mix.Utils.StaleCompatible
 
   defrecordp :source,
@@ -65,6 +64,8 @@ defmodule Mix.Utils.Stale do
 
   ## Manifest
 
+  def manifest, do: Path.join(Mix.Project.manifest_path(), @stale_manifest)
+
   def write_manifest([]) do
     File.rm(manifest())
     :ok
@@ -77,8 +78,6 @@ defmodule Mix.Utils.Stale do
     manifest_data = :erlang.term_to_binary([@manifest_vsn | sources], [:compressed])
     File.write!(manifest, manifest_data)
   end
-
-  defp manifest, do: Path.join(Mix.Project.manifest_path(), @stale_manifest)
 
   defp read_manifest() do
     try do
@@ -117,60 +116,60 @@ defmodule Mix.Utils.Stale do
     sources
   end
 
-  ## Test changed dependency resolution
+  ### Test changed dependency resolution
 
-  defp tests_with_changed_references(test_sources) do
-    test_manifest = manifest()
-    [elixir_manifest] = Mix.Tasks.Compile.Elixir.manifests()
+  # defp tests_with_changed_references(test_sources) do
+  #  test_manifest = manifest()
+  #  [elixir_manifest] = Mix.Tasks.Compile.Elixir.manifests()
 
-    if Mix.Utils.stale?([elixir_manifest], [test_manifest]) do
-      compile_path = Mix.Project.compile_path()
-      {elixir_modules, elixir_sources} = CE.read_manifest(elixir_manifest)
+  #  if Mix.Utils.stale?([elixir_manifest], [test_manifest]) do
+  #    compile_path = Mix.Project.compile_path()
+  #    {elixir_modules, elixir_sources} = CE.read_manifest(elixir_manifest, compile_path)
 
-      stale_modules =
-        for CE.module(module: module) <- elixir_modules,
-            beam = Path.join(compile_path, Atom.to_string(module) <> ".beam"),
-            Mix.Utils.stale?([beam], [test_manifest]),
-            do: module,
-            into: MapSet.new()
+  #    stale_modules =
+  #      for CE.module(module: module) <- elixir_modules,
+  #          beam = Path.join(compile_path, Atom.to_string(module) <> ".beam"),
+  #          Mix.Utils.stale?([beam], [test_manifest]),
+  #          do: module,
+  #          into: MapSet.new()
 
-      stale_modules =
-        find_all_dependent_on(
-          stale_modules,
-          elixir_sources,
-          elixir_modules
-        )
+  #    stale_modules =
+  #      find_all_dependent_on(
+  #        stale_modules,
+  #        elixir_sources,
+  #        elixir_modules
+  #      )
 
-      for module <- stale_modules,
-          source(source: source, runtime_references: r, compile_references: c) <- test_sources,
-          module in r or module in c,
-          do: source,
-          into: MapSet.new()
-    else
-      MapSet.new()
-    end
-  end
+  #    for module <- stale_modules,
+  #        source(source: source, runtime_references: r, compile_references: c) <- test_sources,
+  #        module in r or module in c,
+  #        do: source,
+  #        into: MapSet.new()
+  #  else
+  #    MapSet.new()
+  #  end
+  # end
 
-  defp find_all_dependent_on(modules, sources, all_modules, resolved \\ MapSet.new()) do
-    new_modules =
-      for module <- modules,
-          module not in resolved,
-          dependent_module <- dependent_modules(module, all_modules, sources),
-          do: dependent_module,
-          into: modules
-
-    if MapSet.size(new_modules) == MapSet.size(modules) do
-      new_modules
-    else
-      find_all_dependent_on(new_modules, sources, all_modules, modules)
-    end
-  end
-
-  defp dependent_modules(module, modules, sources) do
-    for CE.source(source: source, runtime_references: r, compile_references: c) <- sources,
-        module in r or module in c,
-        CE.module(sources: sources, module: dependent_module) <- modules,
-        source in sources,
-        do: dependent_module
-  end
+  #  defp find_all_dependent_on(modules, sources, all_modules, resolved \\ MapSet.new()) do
+  #    new_modules =
+  #      for module <- modules,
+  #          module not in resolved,
+  #          dependent_module <- dependent_modules(module, all_modules, sources),
+  #          do: dependent_module,
+  #          into: modules
+  #
+  #    if MapSet.size(new_modules) == MapSet.size(modules) do
+  #      new_modules
+  #    else
+  #      find_all_dependent_on(new_modules, sources, all_modules, modules)
+  #    end
+  #  end
+  #
+  #  defp dependent_modules(module, modules, sources) do
+  #    for CE.source(source: source, runtime_references: r, compile_references: c) <- sources,
+  #        module in r or module in c,
+  #        CE.module(sources: sources, module: dependent_module) <- modules,
+  #        source in sources,
+  #        do: dependent_module
+  #  end
 end
