@@ -19,12 +19,15 @@ defmodule Mix.Utils.StaleCompatible do
 
   defmacro __using__(_args) do
     quote do
+      require Mix.Compilers.Elixir, as: CE
+      import Mix.Utils.StaleCompatible
+
       def parallel_require_callbacks(pid, cwd),
         do:
           Mix.Utils.StaleCompatible.parse_version()
           |> Mix.Utils.StaleCompatible.parallel_require_callbacks(pid, cwd)
 
-      def tests_with_changed_references(test_sources),
+      defmacro tests_with_changed_references(test_sources),
         do:
           Mix.Utils.StaleCompatible.parse_version()
           |> Mix.Utils.StaleCompatible.tests_with_changed_references(test_sources)
@@ -44,69 +47,67 @@ defmodule Mix.Utils.StaleCompatible do
 
   def tests_with_changed_references(%Version{major: 1, minor: minor}, test_sources)
       when minor >= 10 do
-    #    quote bind_quoted: [minor: minor, test_sources: test_sources] do
-    test_manifest = Stale.manifest()
-    [elixir_manifest] = Mix.Tasks.Compile.Elixir.manifests()
+    quote bind_quoted: [minor: minor, test_sources: test_sources] do
+      test_manifest = Stale.manifest()
+      [elixir_manifest] = Mix.Tasks.Compile.Elixir.manifests()
 
-    if Mix.Utils.stale?([elixir_manifest], [test_manifest]) do
-      compile_path = Mix.Project.compile_path()
-      {elixir_modules, elixir_sources} = CE.read_manifest(elixir_manifest)
+      if Mix.Utils.stale?([elixir_manifest], [test_manifest]) do
+        compile_path = Mix.Project.compile_path()
+        {elixir_modules, elixir_sources} = CE.read_manifest(elixir_manifest)
 
-      stale_modules =
-        for CE.module(module: module) <- elixir_modules,
-            beam = Path.join(compile_path, Atom.to_string(module) <> ".beam"),
-            Mix.Utils.stale?([beam], [test_manifest]),
-            do: module,
+        stale_modules =
+          for CE.module(module: module) <- elixir_modules,
+              beam = Path.join(compile_path, Atom.to_string(module) <> ".beam"),
+              Mix.Utils.stale?([beam], [test_manifest]),
+              do: module,
+              into: MapSet.new()
+
+        stale_modules = find_all_dependent_on(stale_modules, elixir_modules, elixir_sources)
+
+        for module <- stale_modules,
+            source(source: source, runtime_references: r, compile_references: c) <- test_sources,
+            module in r or module in c,
+            do: source,
             into: MapSet.new()
-
-      stale_modules = find_all_dependent_on(stale_modules, elixir_modules, elixir_sources)
-
-      for module <- stale_modules,
-          source(source: source, runtime_references: r, compile_references: c) <- test_sources,
-          module in r or module in c,
-          do: source,
-          into: MapSet.new()
-    else
-      MapSet.new()
+      else
+        MapSet.new()
+      end
     end
-
-    #    end
   end
 
   def tests_with_changed_references(%Version{major: 1, minor: minor}, test_sources)
       when minor < 10 do
-    #    quote bind_quoted: [minor: minor, test_sources: test_sources] do
-    test_manifest = Stale.manifest()
-    [elixir_manifest] = Mix.Tasks.Compile.Elixir.manifests()
+    quote bind_quoted: [minor: minor, test_sources: test_sources] do
+      test_manifest = Stale.manifest()
+      [elixir_manifest] = Mix.Tasks.Compile.Elixir.manifests()
 
-    if Mix.Utils.stale?([elixir_manifest], [test_manifest]) do
-      elixir_manifest_entries =
-        CE.read_manifest(elixir_manifest, Mix.Project.compile_path())
-        |> Enum.group_by(&elem(&1, 0))
+      if Mix.Utils.stale?([elixir_manifest], [test_manifest]) do
+        elixir_manifest_entries =
+          CE.read_manifest(elixir_manifest, Mix.Project.compile_path())
+          |> Enum.group_by(&elem(&1, 0))
 
-      stale_modules =
-        for CE.module(module: module, beam: beam) <- elixir_manifest_entries.module,
-            Mix.Utils.stale?([beam], [test_manifest]),
-            do: module,
+        stale_modules =
+          for CE.module(module: module, beam: beam) <- elixir_manifest_entries.module,
+              Mix.Utils.stale?([beam], [test_manifest]),
+              do: module,
+              into: MapSet.new()
+
+        stale_modules =
+          find_all_dependent_on(
+            stale_modules,
+            elixir_manifest_entries.source,
+            elixir_manifest_entries.module
+          )
+
+        for module <- stale_modules,
+            source(source: source, runtime_references: r, compile_references: c) <- test_sources,
+            module in r or module in c,
+            do: source,
             into: MapSet.new()
-
-      stale_modules =
-        find_all_dependent_on(
-          stale_modules,
-          elixir_manifest_entries.source,
-          elixir_manifest_entries.module
-        )
-
-      for module <- stale_modules,
-          source(source: source, runtime_references: r, compile_references: c) <- test_sources,
-          module in r or module in c,
-          do: source,
-          into: MapSet.new()
-    else
-      MapSet.new()
+      else
+        MapSet.new()
+      end
     end
-
-    #    end
   end
 
   ## ParallelRequire callback: Handled differently depending on Elixir version
@@ -195,7 +196,7 @@ defmodule Mix.Utils.StaleCompatible do
     end
   end
 
-  defp get_external_resources(module, cwd) do
+  def get_external_resources(module, cwd) do
     #    quote bind_quoted: [module: module, cwd: cwd] do
     for file <- Module.get_attribute(module, :external_resource),
         do: Path.relative_to(file, cwd)
@@ -203,7 +204,7 @@ defmodule Mix.Utils.StaleCompatible do
     #    end
   end
 
-  defp find_all_dependent_on(modules, sources, all_modules, resolved \\ MapSet.new()) do
+  def find_all_dependent_on(modules, sources, all_modules, resolved \\ MapSet.new()) do
     #    quote bind_quoted: [
     #            modules: modules,
     #            sources: sources,
@@ -226,7 +227,7 @@ defmodule Mix.Utils.StaleCompatible do
     #    end
   end
 
-  defp dependent_modules(module, modules, sources) do
+  def dependent_modules(module, modules, sources) do
     for CE.source(source: source, runtime_references: r, compile_references: c) <- sources,
         module in r or module in c,
         CE.module(sources: sources, module: dependent_module) <- modules,
