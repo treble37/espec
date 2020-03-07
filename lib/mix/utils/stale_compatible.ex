@@ -1,5 +1,6 @@
 defmodule Mix.Utils.StaleCompatible do
-  @moduledoc """
+  @moduledoc false
+  """
   This module was written to deal with the incompatibilies between Elixir <= 1.9
   and the release of Elixir 1.10. It is expected to eventually go away if certain
   private APIs in Elixir become public.
