@@ -1,5 +1,5 @@
 defmodule ConfigBeforeTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   ESpec.configure(fn c ->
     c.before(fn tags ->
